@@ -1,6 +1,6 @@
 /*
     ========================================
-    🎁 BMS STUDIO SAWERIA - Fixed Server
+    🎁 BMS STUDIO SAWERIA - Fixed V2
     ========================================
     Credit: BMS STUDIO SAWERIA
     ========================================
@@ -9,36 +9,53 @@
 const express = require('express')
 const app = express()
 app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
 
 let donasi = []
 let topDonatur = {}
 let totalDonasi = 0
+let lastRawData = null // Simpan data mentah untuk debug
 
 app.post('/webhook', (req, res) => {
-    // Log untuk debug
-    console.log("📦 Data masuk:", JSON.stringify(req.body))
+    // Simpan data mentah
+    lastRawData = req.body
+    console.log("📦 RAW DATA:", JSON.stringify(req.body, null, 2))
     
-    // Saweria bisa kirim dengan berbagai nama field
-    const nama = req.body.donator_name 
-        || req.body.donatorName 
-        || req.body.name 
-        || req.body.sender
+    const body = req.body
+    
+    // Coba semua kemungkinan field dari Saweria
+    const nama = body.donator_name 
+        || body.donatorName 
+        || body.empiId
+        || body.name 
+        || body.sender
+        || body.from
         || "Anonim"
     
-    const jumlah = req.body.amount 
-        || req.body.total 
-        || req.body.donation
-        || req.body.value
-        || 0
+    // PENTING: Convert ke number dan coba berbagai field
+    let jumlah = 0
     
-    const pesan = req.body.message 
-        || req.body.msg 
-        || req.body.note
+    if (body.amount) jumlah = Number(body.amount)
+    else if (body.total) jumlah = Number(body.total)
+    else if (body.amount_raw) jumlah = Number(body.amount_raw)
+    else if (body.donation) jumlah = Number(body.donation)
+    else if (body.value) jumlah = Number(body.value)
+    else if (body.price) jumlah = Number(body.price)
+    
+    // Jika masih 0, coba cari di nested object
+    if (jumlah === 0 && body.data) {
+        jumlah = Number(body.data.amount) || Number(body.data.total) || 0
+    }
+    
+    const pesan = body.message 
+        || body.msg 
+        || body.note
+        || body.text
         || ""
     
-    const waktu = Date.now()
+    console.log(`💰 PARSED: ${nama} - Rp${jumlah} - "${pesan}"`)
     
-    console.log(`💰 Parsed: ${nama} - Rp${jumlah} - "${pesan}"`)
+    const waktu = Date.now()
     
     donasi.push({ nama, jumlah, pesan, waktu })
     
@@ -50,7 +67,7 @@ app.post('/webhook', (req, res) => {
     
     totalDonasi += jumlah
     
-    res.send("OK")
+    res.status(200).send("OK")
 })
 
 app.get('/cek', (req, res) => {
@@ -78,12 +95,20 @@ app.get('/stats', (req, res) => {
     })
 })
 
-// Debug endpoint - lihat data mentah terakhir
+// DEBUG - Lihat data mentah terakhir dari Saweria
+app.get('/raw', (req, res) => {
+    res.json({
+        message: "Data mentah terakhir dari Saweria:",
+        data: lastRawData
+    })
+})
+
 app.get('/debug', (req, res) => {
     res.json({
         pendingDonasi: donasi,
         topDonatur,
-        totalDonasi
+        totalDonasi,
+        lastRawData
     })
 })
 
@@ -107,7 +132,8 @@ app.get('/reset', (req, res) => {
     topDonatur = {}
     donasi = []
     totalDonasi = 0
-    res.send("Reset!")
+    lastRawData = null
+    res.send("Reset berhasil!")
 })
 
 app.get('/', (req, res) => {
