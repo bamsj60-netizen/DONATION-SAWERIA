@@ -1,6 +1,8 @@
 /*
     ========================================
-    🎁 BMS STUDIO SAWERIA - Server
+    🎁 BMS STUDIO SAWERIA - Premium Server
+    ========================================
+    Credit: BMS STUDIO SAWERIA
     ========================================
 */
 
@@ -10,16 +12,27 @@ app.use(express.json())
 
 let donasi = []
 let topDonatur = {}
+let totalDonasi = 0
+let recentDonations = []
 
 app.post('/webhook', (req, res) => {
     const nama = req.body.donator_name || "Anonim"
     const jumlah = req.body.amount || 0
     const pesan = req.body.message || ""
+    const waktu = Date.now()
     
-    donasi.push({ nama, jumlah, pesan, waktu: Date.now() })
+    donasi.push({ nama, jumlah, pesan, waktu })
     
-    if (!topDonatur[nama]) topDonatur[nama] = 0
-    topDonatur[nama] += jumlah
+    if (!topDonatur[nama]) topDonatur[nama] = { total: 0, count: 0, lastDonation: 0 }
+    topDonatur[nama].total += jumlah
+    topDonatur[nama].count += 1
+    topDonatur[nama].lastDonation = waktu
+    
+    totalDonasi += jumlah
+    
+    // Keep last 50 donations
+    recentDonations.unshift({ nama, jumlah, pesan, waktu })
+    if (recentDonations.length > 50) recentDonations.pop()
     
     console.log(`💰 ${nama} - Rp${jumlah}`)
     res.send("OK")
@@ -31,35 +44,65 @@ app.get('/cek', (req, res) => {
     res.json(data)
 })
 
-// UNLIMITED top donatur (tidak dibatasi 10)
 app.get('/top', (req, res) => {
     let sorted = Object.entries(topDonatur)
-        .map(([nama, total]) => ({ nama, total }))
+        .map(([nama, data]) => ({ 
+            nama, 
+            total: data.total,
+            count: data.count,
+            lastDonation: data.lastDonation
+        }))
         .sort((a, b) => b.total - a.total)
     
     res.json(sorted)
 })
 
+app.get('/stats', (req, res) => {
+    res.json({
+        totalDonasi,
+        totalDonatur: Object.keys(topDonatur).length,
+        recentDonations: recentDonations.slice(0, 10)
+    })
+})
+
 app.get('/test', (req, res) => {
-    const names = ["Budi", "Ani", "Caca", "Doni", "Eka", "Fira", "Gani", "Hani"]
-    const nama = names[Math.floor(Math.random() * names.length)] + Math.floor(Math.random() * 100)
-    const jumlah = Math.floor(Math.random() * 100000) + 5000
+    const names = ["Rizky", "Andi", "Sari", "Budi", "Maya", "Dika", "Putri", "Fajar", "Luna", "Reza"]
+    const messages = ["Semangat!", "GG bang!", "Lanjutkan!", "Mantap!", "Keep it up!", ""]
+    const nama = names[Math.floor(Math.random() * names.length)]
+    const jumlah = Math.floor(Math.random() * 150000) + 5000
+    const pesan = messages[Math.floor(Math.random() * messages.length)]
+    const waktu = Date.now()
     
-    donasi.push({ nama, jumlah, pesan: "Test!", waktu: Date.now() })
-    if (!topDonatur[nama]) topDonatur[nama] = 0
-    topDonatur[nama] += jumlah
+    donasi.push({ nama, jumlah, pesan, waktu })
     
-    res.send(`OK! ${nama} Rp${jumlah}`)
+    if (!topDonatur[nama]) topDonatur[nama] = { total: 0, count: 0, lastDonation: 0 }
+    topDonatur[nama].total += jumlah
+    topDonatur[nama].count += 1
+    topDonatur[nama].lastDonation = waktu
+    
+    totalDonasi += jumlah
+    recentDonations.unshift({ nama, jumlah, pesan, waktu })
+    
+    res.send(`✅ ${nama} donated Rp${jumlah.toLocaleString()}`)
 })
 
 app.get('/reset', (req, res) => {
     topDonatur = {}
     donasi = []
-    res.send("Reset!")
+    totalDonasi = 0
+    recentDonations = []
+    res.send("Reset complete!")
 })
 
 app.get('/', (req, res) => {
-    res.json({ status: "BMS STUDIO SAWERIA", donatur: Object.keys(topDonatur).length })
+    res.json({ 
+        name: "BMS STUDIO SAWERIA",
+        status: "Active",
+        totalDonatur: Object.keys(topDonatur).length,
+        totalDonasi
+    })
 })
 
-app.listen(process.env.PORT || 3000)
+app.listen(process.env.PORT || 3000, () => {
+    console.log("🎁 BMS STUDIO SAWERIA - Server Running!")
+})
