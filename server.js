@@ -1,6 +1,6 @@
 /*
     ========================================
-    🎁 BMS STUDIO SAWERIA - Fixed V2
+    🎁 BMS STUDIO SAWERIA - Avatar Update
     ========================================
     Credit: BMS STUDIO SAWERIA
     ========================================
@@ -14,56 +14,64 @@ app.use(express.urlencoded({ extended: true }))
 let donasi = []
 let topDonatur = {}
 let totalDonasi = 0
-let lastRawData = null // Simpan data mentah untuk debug
+let lastRawData = null
 
 app.post('/webhook', (req, res) => {
-    // Simpan data mentah
     lastRawData = req.body
-    console.log("📦 RAW DATA:", JSON.stringify(req.body, null, 2))
+    console.log("📦 RAW:", JSON.stringify(req.body))
     
     const body = req.body
     
-    // Coba semua kemungkinan field dari Saweria
-    const nama = body.donator_name 
+    let nama = body.donator_name 
         || body.donatorName 
-        || body.empiId
         || body.name 
         || body.sender
-        || body.from
         || "Anonim"
     
-    // PENTING: Convert ke number dan coba berbagai field
     let jumlah = 0
-    
     if (body.amount) jumlah = Number(body.amount)
     else if (body.total) jumlah = Number(body.total)
     else if (body.amount_raw) jumlah = Number(body.amount_raw)
-    else if (body.donation) jumlah = Number(body.donation)
-    else if (body.value) jumlah = Number(body.value)
-    else if (body.price) jumlah = Number(body.price)
     
-    // Jika masih 0, coba cari di nested object
-    if (jumlah === 0 && body.data) {
-        jumlah = Number(body.data.amount) || Number(body.data.total) || 0
+    let pesan = body.message || body.msg || body.note || ""
+    
+    // Detect @username di nama ATAU pesan
+    let robloxUsername = null
+    
+    // Cek di nama donatur
+    const namaMatch = nama.match(/@(\w+)/)
+    if (namaMatch) {
+        robloxUsername = namaMatch[1]
     }
     
-    const pesan = body.message 
-        || body.msg 
-        || body.note
-        || body.text
-        || ""
+    // Cek di pesan
+    if (!robloxUsername) {
+        const pesanMatch = pesan.match(/@(\w+)/)
+        if (pesanMatch) {
+            robloxUsername = pesanMatch[1]
+        }
+    }
     
-    console.log(`💰 PARSED: ${nama} - Rp${jumlah} - "${pesan}"`)
+    console.log(`💰 ${nama} - Rp${jumlah} - Roblox: ${robloxUsername || 'none'}`)
     
     const waktu = Date.now()
     
-    donasi.push({ nama, jumlah, pesan, waktu })
+    donasi.push({ 
+        nama, 
+        jumlah, 
+        pesan, 
+        waktu,
+        robloxUsername // Tambah field ini
+    })
     
-    if (!topDonatur[nama]) {
-        topDonatur[nama] = { total: 0, count: 0 }
+    // Untuk top donatur, gunakan robloxUsername jika ada
+    const key = robloxUsername || nama
+    if (!topDonatur[key]) {
+        topDonatur[key] = { total: 0, count: 0, robloxUsername }
     }
-    topDonatur[nama].total += jumlah
-    topDonatur[nama].count += 1
+    topDonatur[key].total += jumlah
+    topDonatur[key].count += 1
+    topDonatur[key].robloxUsername = robloxUsername
     
     totalDonasi += jumlah
     
@@ -81,7 +89,8 @@ app.get('/top', (req, res) => {
         .map(([nama, data]) => ({ 
             nama, 
             total: data.total,
-            count: data.count
+            count: data.count,
+            robloxUsername: data.robloxUsername
         }))
         .sort((a, b) => b.total - a.total)
     
@@ -95,12 +104,8 @@ app.get('/stats', (req, res) => {
     })
 })
 
-// DEBUG - Lihat data mentah terakhir dari Saweria
 app.get('/raw', (req, res) => {
-    res.json({
-        message: "Data mentah terakhir dari Saweria:",
-        data: lastRawData
-    })
+    res.json({ data: lastRawData })
 })
 
 app.get('/debug', (req, res) => {
@@ -113,32 +118,45 @@ app.get('/debug', (req, res) => {
 })
 
 app.get('/test', (req, res) => {
-    const nama = "Tester" + Math.floor(Math.random() * 100)
+    const names = ["@TestPlayer123", "@GamerPro", "@CoolUser", "Anonymous"]
+    const messages = ["Semangat!", "GG bang!", "@MyRobloxName mantap!", ""]
+    const nama = names[Math.floor(Math.random() * names.length)]
     const jumlah = Math.floor(Math.random() * 50000) + 1000
+    const pesan = messages[Math.floor(Math.random() * messages.length)]
     
-    donasi.push({ nama, jumlah, pesan: "Test!", waktu: Date.now() })
+    let robloxUsername = null
+    const namaMatch = nama.match(/@(\w+)/)
+    if (namaMatch) robloxUsername = namaMatch[1]
     
-    if (!topDonatur[nama]) {
-        topDonatur[nama] = { total: 0, count: 0 }
+    if (!robloxUsername) {
+        const pesanMatch = pesan.match(/@(\w+)/)
+        if (pesanMatch) robloxUsername = pesanMatch[1]
     }
-    topDonatur[nama].total += jumlah
-    topDonatur[nama].count += 1
+    
+    donasi.push({ nama, jumlah, pesan, waktu: Date.now(), robloxUsername })
+    
+    const key = robloxUsername || nama
+    if (!topDonatur[key]) {
+        topDonatur[key] = { total: 0, count: 0, robloxUsername }
+    }
+    topDonatur[key].total += jumlah
+    topDonatur[key].count += 1
     totalDonasi += jumlah
     
-    res.send(`✅ ${nama} - Rp${jumlah}`)
+    res.send(`✅ ${nama} - Rp${jumlah} - Roblox: ${robloxUsername || 'none'}`)
 })
 
 app.get('/reset', (req, res) => {
     topDonatur = {}
     donasi = []
     totalDonasi = 0
-    lastRawData = null
-    res.send("Reset berhasil!")
+    res.send("Reset!")
 })
 
 app.get('/', (req, res) => {
     res.json({ 
         status: "BMS STUDIO SAWERIA",
+        info: "Gunakan @username di nama atau pesan untuk link ke Roblox",
         totalDonatur: Object.keys(topDonatur).length,
         totalDonasi
     })
