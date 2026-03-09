@@ -118,7 +118,7 @@ app.get('/debug', (req, res) => {
 })
 
 app.get('/test', (req, res) => {
-    const names = ["@Pepekluanjg"]
+    const names = ["@Xioon62"]
     const messages = ["Semangat!", "GG bang!", "@MyRobloxName mantap!", ""]
     const nama = names[Math.floor(Math.random() * names.length)]
     const jumlah = Math.floor(Math.random() * 50000) + 1000
